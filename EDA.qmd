@@ -1,0 +1,61 @@
+---
+title: "Meadow_Project"
+format: html
+editor: visual
+---
+
+## Data Loading
+
+```{r, message=FALSE, warning=FALSE}
+library(readxl)
+Artery1 <- read_excel("ArteryPropertiesForMSSP.xlsx", sheet = "Sheet1",col_names = FALSE)
+
+Artery2 <- read_excel("ArteryPropertiesForMSSP.xlsx", sheet = "Sheet2",col_names=FALSE)
+```
+
+## Transpose columns and rows
+
+```{r}
+Artery1<-t(Artery1)
+Artery2<-t(Artery2)
+first_row <- Artery1[1, ]
+Artery1_data <- Artery1[-1, ]
+colnames(Artery1_data) <- as.character(first_row)
+
+first_row <- Artery2[1, ]
+Artery2_data <- Artery2[-1, ]
+colnames(Artery2_data) <- as.character(first_row)
+```
+      
+```{r}
+library(tidyverse)
+
+clean_mat <- function(mat) {
+  mat %>%
+    as_tibble(.name_repair = "minimal") %>%
+    mutate(across(everything(), ~ {
+      .x %>%
+        as.character() %>%
+        # 去空格
+        str_replace_all("\\s+", "") %>%
+        # .xxx → 0.xxx
+        str_replace("^\\.", "0.") %>%
+        # 转 numeric
+        as.numeric()
+    })) %>%
+    as.matrix()
+}
+```
+
+```{r}
+Artery1_data_1 <- clean_mat(Artery1_data)
+Artery2_data_1<- clean_mat(Artery2_data)
+```
+
+
+
+## EDA
+
+```{r}
+summary(Artery1_data)
+```
