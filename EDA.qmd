@@ -57,5 +57,5 @@ Artery2_data_1<- clean_mat(Artery2_data)
 ## EDA
 
 ```{r}
-summary(Artery1_data)
+summary(Artery1_data_1)
 ```
