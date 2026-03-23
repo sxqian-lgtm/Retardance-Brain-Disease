@@ -8,9 +8,10 @@ editor: visual
 
 ```{r, message=FALSE, warning=FALSE}
 library(readxl)
-Artery1 <- read_excel("ArteryPropertiesForMSSP.xlsx", sheet = "Sheet1",col_names = FALSE)
+Artery1 <- read_excel("ArteryPropertiesForMSSP_8304_7556.xlsx", sheet = "Sheet1", col_names = FALSE)
 
-Artery2 <- read_excel("ArteryPropertiesForMSSP.xlsx", sheet = "Sheet2",col_names=FALSE)
+Artery2 <- read_excel("ArteryPropertiesForMSSP_8304_7556.xlsx", sheet = "Sheet2", col_names =FALSE)
+Artery3 <- read_excel("ArteryPropertiesForMSSP_8304_7556.xlsx", sheet = "Sheet3", col_names =FALSE)
 ```
 
 ## Transpose columns and rows
@@ -18,6 +19,7 @@ Artery2 <- read_excel("ArteryPropertiesForMSSP.xlsx", sheet = "Sheet2",col_names
 ```{r}
 Artery1<-t(Artery1)
 Artery2<-t(Artery2)
+Artery3<-t(Artery3)
 first_row <- Artery1[1, ]
 Artery1_data <- Artery1[-1, ]
 colnames(Artery1_data) <- as.character(first_row)
@@ -25,37 +27,314 @@ colnames(Artery1_data) <- as.character(first_row)
 first_row <- Artery2[1, ]
 Artery2_data <- Artery2[-1, ]
 colnames(Artery2_data) <- as.character(first_row)
+
+first_row <- Artery3[1, ]
+Artery3_data <- Artery3[-1, ]
+colnames(Artery3_data) <- as.character(first_row)
+
 ```
-      
+
+```{r}
+print(colnames(Artery1_data))
+print(colnames(Artery2_data))
+print(colnames(Artery3_data))
+```
+
 ```{r}
 library(tidyverse)
 
-clean_mat <- function(mat) {
+clean_numeric_df <- function(mat) {
   mat %>%
     as_tibble(.name_repair = "minimal") %>%
     mutate(across(everything(), ~ {
-      .x %>%
-        as.character() %>%
-        # 去空格
-        str_replace_all("\\s+", "") %>%
-        # .xxx → 0.xxx
-        str_replace("^\\.", "0.") %>%
-        # 转 numeric
-        as.numeric()
-    })) %>%
-    as.matrix()
+      x <- as.character(.x)
+      x <- stringr::str_trim(x)
+      x[x == ""] <- NA
+      x <- stringr::str_replace(x, "^\\.", "0.")
+      as.numeric(x)
+    }))
 }
 ```
 
 ```{r}
-Artery1_data_1 <- clean_mat(Artery1_data)
+Artery1_data_1<- clean_mat(Artery1_data)
 Artery2_data_1<- clean_mat(Artery2_data)
+Artery3_data_1<- clean_mat(Artery3_data)
+
 ```
-
-
 
 ## EDA
 
 ```{r}
-summary(Artery1_data_1)
+eda_overview <- function(df) {
+  cat("===== BASIC INFO =====\n")
+  cat("Rows:", nrow(df), "\n")
+  cat("Cols:", ncol(df), "\n\n")
+  
+  cat("===== STRUCTURE =====\n")
+  print(str(df))
+  
+  cat("\n===== SUMMARY =====\n")
+  print(summary(df))
+}
+eda_missing <- function(df) {
+  data.frame(
+    variable = names(df),
+    missing_rate = colMeans(is.na(df))
+  ) %>% arrange(desc(missing_rate))
+}
+
+eda_missing_plot <- function(df) {
+  missing_rate <- colMeans(is.na(df))
+  barplot(sort(missing_rate, decreasing = TRUE),
+          las = 2,
+          col = "steelblue",
+          main = "Missing Rate per Variable")
+}
+eda_numeric_summary <- function(df) {
+  data.frame(
+    variable = names(df),
+    mean = colMeans(df, na.rm = TRUE),
+    sd = apply(df, 2, sd, na.rm = TRUE),
+    min = apply(df, 2, min, na.rm = TRUE),
+    max = apply(df, 2, max, na.rm = TRUE),
+    missing_rate = colMeans(is.na(df))
+  )
+}
+
+eda_histograms <- function(df) {
+  num_df <- df[sapply(df, is.numeric)]
+  
+  par(mfrow = c(3, 3))
+  for (col in names(num_df)) {
+    hist(num_df[[col]],
+         main = col,
+         xlab = "",
+         col = "lightblue",
+         border = "white")
+  }
+  par(mfrow = c(1, 1))
+}
+eda_categorical <- function(df) {
+  cat_df <- df[!sapply(df, is.numeric)]
+  
+  for (col in names(cat_df)) {
+    cat("\n===== ", col, " =====\n")
+    print(table(cat_df[[col]], useNA = "ifany"))
+  }
+}
+eda_correlation <- function(df) {
+  cor(df, use = "pairwise.complete.obs")
+}
+
+eda_corr_plot <- function(df) {
+  cor_matrix <- cor(df, use = "pairwise.complete.obs")
+  
+  image(1:ncol(cor_matrix), 1:ncol(cor_matrix), cor_matrix,
+        axes = FALSE,
+        xlab = "",
+        ylab = "",
+        main = "Correlation Heatmap")
+  
+  axis(1, at = 1:ncol(cor_matrix), labels = colnames(cor_matrix), las = 2)
+  axis(2, at = 1:ncol(cor_matrix), labels = colnames(cor_matrix), las = 2)
+  
+  # 🔥 加数字
+  for (i in 1:ncol(cor_matrix)) {
+    for (j in 1:ncol(cor_matrix)) {
+      text(i, j, round(cor_matrix[i, j], 2), cex = 0.7)
+    }
+  }
+}
+
+eda_clean_data <- function(df, missing_threshold = 0.4) {
+  missing_rate <- colMeans(is.na(df))
+  
+  # 删除高缺失变量
+  df <- df[, missing_rate < missing_threshold]
+  
+  # median 填补
+  for (col in names(df)) {
+    if (is.numeric(df[[col]])) {
+      df[[col]][is.na(df[[col]])] <- median(df[[col]], na.rm = TRUE)
+    }
+  }
+  
+  return(df)
+}
+eda_full <- function(df) {
+  cat("========== OVERVIEW ==========\n")
+  eda_overview(df)
+  
+  cat("\n========== MISSING ==========\n")
+  print(eda_missing(df))
+  
+  cat("\n========== NUMERIC SUMMARY ==========\n")
+  print(eda_numeric_summary(df))
+  
+  cat("\n========== CORRELATION ==========\n")
+  print(eda_correlation(df))
+}
+
 ```
+
+```{r}
+Artery1_data_2 <- as.data.frame(Artery1_data_1) %>% select(-Name)
+Artery2_data_2 <- as.data.frame(Artery2_data_1) %>% select(-Name)
+Artery3_data_2 <- as.data.frame(Artery3_data_1) %>% select(-Name)
+eda_overview(Artery1_data_2)
+eda_missing(Artery1_data_2)
+eda_missing_plot(Artery1_data_2)
+eda_numeric_summary(Artery1_data_2)
+eda_histograms(Artery1_data_2)
+cor_mat1 <- eda_correlation(Artery1_data_2)
+eda_corr_plot(Artery1_data_2)
+
+
+eda_overview(Artery2_data_2)
+eda_missing(Artery2_data_2)
+eda_missing_plot(Artery2_data_2)
+eda_numeric_summary(Artery2_data_2)
+eda_histograms(Artery2_data_2)
+cor_mat2 <- eda_correlation(Artery2_data_2)
+eda_corr_plot(Artery2_data_2)
+
+
+eda_overview(Artery3_data_2)
+eda_missing(Artery3_data_2)
+eda_missing_plot(Artery3_data_2)
+eda_numeric_summary(Artery3_data_2)
+eda_histograms(Artery3_data_2)
+cor_mat3 <- eda_correlation(Artery3_data_2)
+eda_corr_plot(Artery3_data_2)
+```
+```{r}
+eda_count_by_name <- function(df, id_col = "Name") {
+  library(dplyr)
+  
+  cat("===== COUNT PER NAME =====\n")
+  
+  res <- df %>%
+    group_by(across(all_of(id_col))) %>%
+    summarise(n = n(), .groups = "drop")
+  
+  print(res)
+  
+  cat("\nSummary of counts:\n")
+  print(summary(res$n))
+  return(res)
+}
+
+eda_group_mean <- function(df, id_col = "Name") {
+  library(dplyr)
+  
+  cat("===== GROUP MEAN =====\n")
+  
+  res <- df %>%
+    group_by(across(all_of(id_col))) %>%
+    summarise(across(where(is.numeric),
+                     ~mean(.x, na.rm = TRUE)),
+              .groups = "drop")
+  
+  print(head(res, 10))
+  
+  cat("\nDimensions:\n")
+  print(dim(res))
+  return(res)
+}
+
+eda_group_sd <- function(df, id_col = "Name") {
+  library(dplyr)
+  
+  cat("===== GROUP SD =====\n")
+  
+  res <- df %>%
+    group_by(across(all_of(id_col))) %>%
+    summarise(across(where(is.numeric),
+                     ~sd(.x, na.rm = TRUE)),
+              .groups = "drop")
+  
+  print(head(res, 10))
+  
+  cat("\nDimensions:\n")
+  print(dim(res))
+  return(res)
+}
+
+eda_missing_by_name <- function(df, id_col = "Name") {
+  library(dplyr)
+  
+  cat("===== MISSING RATE BY NAME =====\n")
+  
+  res <- df %>%
+    group_by(across(all_of(id_col))) %>%
+    summarise(across(where(is.numeric),
+                     ~mean(is.na(.x))),
+              .groups = "drop")
+  
+  print(head(res, 10))
+  return(res)
+}
+
+eda_boxplot_by_name <- function(df, y_var, id_col = "Name") {
+  cat("===== BOXPLOT =====\n")
+  cat("Variable:", y_var, "\n")
+  
+  formula_str <- paste(y_var, "~", id_col)
+  
+  boxplot(as.formula(formula_str),
+          data = df,
+          las = 2,
+          col = "lightblue",
+          main = paste("Boxplot of", y_var, "by", id_col))
+}
+
+eda_group_correlation <- function(df, var1, var2, id_col = "Name") {
+  library(dplyr)
+  
+  cat("===== GROUP CORRELATION =====\n")
+  cat("Variables:", var1, "vs", var2, "\n")
+  
+  res <- df %>%
+    group_by(across(all_of(id_col))) %>%
+    summarise(cor_value = cor(.data[[var1]],
+                              .data[[var2]],
+                              use = "complete.obs"),
+              .groups = "drop")
+  
+  print(res)
+  
+  cat("\nSummary:\n")
+  print(summary(res$cor_value))
+  return(res)
+}
+
+eda_group_full <- function(df, id_col = "Name", target = NULL) {
+  
+  cat("========== GROUPED EDA ==========\n\n")
+  
+  t1=eda_count_by_name(df, id_col)
+  cat("\n---------------------------------\n")
+  
+  t2=eda_group_mean(df, id_col)
+  cat("\n---------------------------------\n")
+  
+  t3=eda_group_sd(df, id_col)
+  cat("\n---------------------------------\n")
+  
+  t4=eda_missing_by_name(df, id_col)
+  cat("\n---------------------------------\n")
+  
+  if (!is.null(target)) {
+    cat("\nTarget variable distribution:\n")
+    eda_boxplot_by_name(df, target, id_col)
+  }
+}
+
+```
+
+```{r}
+Artery1_data_3<-as.data.frame(Artery1_data_1) 
+eda_group_full(Artery1_data_3, id_col = "Name", target = "total_mean_retardance")
+```
+
