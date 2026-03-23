@@ -338,3 +338,33 @@ Artery1_data_3<-as.data.frame(Artery1_data_1)
 eda_group_full(Artery1_data_3, id_col = "Name", target = "total_mean_retardance")
 ```
 
+```{r}
+eda_age_play <- function(df) {
+  cat("===== AGE vs YEARS OF PLAY =====\n")
+  
+  # 相关系数
+  cor_val <- cor(df$Age, df$Years_of_Play, use = "complete.obs")
+  cat("Correlation:", round(cor_val, 3), "\n\n")
+  
+  # summary
+  cat("Age summary:\n")
+  print(summary(df$Age))
+  
+  cat("\nYears of play summary:\n")
+  print(summary(df$Years_of_Play))
+  
+  # scatter plot
+  plot(df$Age, df$Years_of_Play,
+       xlab = "Age",
+       ylab = "Years of Play",
+       main = "Age vs Years of Play",
+       col = "blue", pch = 16)
+  
+  # 加一条线性拟合线
+  abline(lm(Years_of_Play ~ Age, data = df), col = "red", lwd = 2)
+  
+  return(cor_val)
+}
+eda_age_play(Artery1_data_2)
+```
+
